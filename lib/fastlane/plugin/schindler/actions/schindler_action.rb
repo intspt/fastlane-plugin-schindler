@@ -20,6 +20,7 @@ module Fastlane
         user_id = params[:user_id].to_s
         user_password = params[:user_password].to_s
         ios_app_id = params[:ios_app_id].to_s
+        minimum_version = params[:minimum_version].to_s
         puts "================================\n新建名单，初始化参数信息：\n筛选类型(位运算)：#{filter_type}  (#{Filter_Uninstall}-未安装，#{Filter_Expire}-已过期，#{Filter_UnUse}-未使用)\n跳过二次确认：#{auto_confirm}\n账号：#{user_id}\n密码：******\n应用ID：#{ios_app_id}\n================================"
 
         # 先扫描未安装、已过期
@@ -30,19 +31,17 @@ module Fastlane
         # 再扫描未使用，因为未使用需要全量查询，耗时1小时起步，容易超时
         if filter_type & Filter_UnUse > 0
           add_process_unused(auto_confirm: auto_confirm, ios_app_id: ios_app_id, user_id: user_id,
-                             user_password: user_password)
+                             user_password: user_password, minimum_version: minimum_version)
         end
       end
 
-      def self.exec_process(testers, filter_type, auto_confirm)
+      def self.exec_process(testers, filter_type, auto_confirm, minimum_version)
         return [] if testers.nil?
 
         ids = []
         # 90天前的安装
         currentDate = DateTime.now.to_time
         expiredtime = (currentDate - 60 * 60 * 24 * 90).to_i
-        # 7天内更新的，不统计打开次数
-        sevendaytime = (currentDate - 60 * 60 * 24 * 7).to_i
 
         testers.each do |tester|
           # puts "测试员信息：#{tester.to_json}"
@@ -71,8 +70,8 @@ module Fastlane
               ids << id
 
               puts '===== 已过期 +1 ====='
-            elsif (filter_type & Filter_UnUse) > 0 && count < 1 && last_date < sevendaytime
-              # 超过7天未使用
+            elsif (filter_type & Filter_UnUse) > 0 && count < 1 && lower_than_minimum_version(metric.installed_cf_bundle_short_version_string, minimum_version)
+              # 使用次数为0并且版本低于最小版本
               ids << id
 
               puts '===== 未使用 +1 ====='
@@ -131,7 +130,14 @@ module Fastlane
         modified_date
       end
 
-      def self.add_process_unused(auto_confirm: false, ios_app_id: nil, user_id: nil, user_password: nil)
+      def self.lower_than_minimum_version(version_string, minimum_version_string)
+        if minimum_version_string.nil?
+          return false
+        end
+        Gem::Version.new(version_string) <= Gem::Version.new(minimum_version_string)
+      end
+
+      def self.add_process_unused(auto_confirm: false, ios_app_id: nil, user_id: nil, user_password: nil, minimum_version: nil)
         # 查询全量数据，但容易超时，未使用的用户只能全量查询
         puts "#{DateTime.now.to_time} 开始获取App数据……"
         app = Spaceship::ConnectAPI::App.get(app_id: ios_app_id)
@@ -149,7 +155,7 @@ module Fastlane
         end
         puts "#{DateTime.now.to_time} 获取测试人员列表成功，共#{testers.count}个"
 
-        ids = exec_process(testers, Filter_UnUse, auto_confirm)
+        ids = exec_process(testers, Filter_UnUse, auto_confirm, minimum_version)
         return if ids.size < 1
 
         client = Spaceship::ConnectAPI::Client.login(user_id, user_password)
@@ -170,7 +176,7 @@ module Fastlane
 
           puts "#{DateTime.now.to_time} 获取测试人员列表成功，共#{testers.count}个"
 
-          ids = exec_process(testers, filter_type, auto_confirm)
+          ids = exec_process(testers, filter_type, auto_confirm, nil)
           if ids.size < 1
             puts "未安装 or 已过期 测试员清除完毕\n================================"
             return
@@ -230,6 +236,11 @@ module Fastlane
                                        env_name: 'SCHINDLER_APP_ID',
                                        description: 'The ID of the app in the Apple Store',
                                        optional: false,
+                                       type: String),
+          FastlaneCore::ConfigItem.new(key: :minimum_version,
+                                       env_name: 'MINIMUM_VERSION',
+                                       description: '最低版本，如果传了。使用次数为0时需要低于最低版本才会删除',
+                                       optional: true,
                                        type: String)
         ]
       end

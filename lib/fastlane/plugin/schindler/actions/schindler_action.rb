@@ -70,8 +70,8 @@ module Fastlane
               ids << id
 
               puts '===== 已过期 +1 ====='
-            elsif (filter_type & Filter_UnUse) > 0 && lower_than_minimum_version(metric.installed_cf_bundle_short_version_string, minimum_version)
-              # 版本低于最小版本
+            elsif (filter_type & Filter_UnUse) > 0 && (count < 10 || lower_than_minimum_version(metric.installed_cf_bundle_short_version_string, minimum_version))
+              # 使用次数太少或者版本低于最小版本
               ids << id
 
               puts '===== 不活跃 +1 ====='

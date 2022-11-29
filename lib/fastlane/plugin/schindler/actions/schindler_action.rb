@@ -27,16 +27,16 @@ module Fastlane
         # 先扫描未安装、已过期
         if (filter_type & Filter_Uninstall > 0) || (filter_type & Filter_Expire > 0)
           add_process_uninstall_expired(filter_type: filter_type, auto_confirm: auto_confirm, ios_app_id: ios_app_id,
-                                        user_id: user_id, user_password: user_password)
+                                        user_id: user_id, user_password: user_password, minimum_version: minimum_version, newest_version: newest_version)
         end
         # 再扫描未使用，因为未使用需要全量查询，耗时1小时起步，容易超时
         if filter_type & Filter_UnUse > 0
           add_process_unused(auto_confirm: auto_confirm, ios_app_id: ios_app_id, user_id: user_id,
-                             user_password: user_password, minimum_version: minimum_version)
+                             user_password: user_password, minimum_version: minimum_version, newest_version: newest_version)
         end
       end
 
-      def self.exec_process(testers, filter_type, auto_confirm, minimum_version)
+      def self.exec_process(testers, filter_type, auto_confirm, minimum_version, newest_version)
         return [] if testers.nil?
 
         ids = []
@@ -139,7 +139,7 @@ module Fastlane
         Gem::Version.new(version_string) <= Gem::Version.new(minimum_version_string)
       end
 
-      def self.add_process_unused(auto_confirm: false, ios_app_id: nil, user_id: nil, user_password: nil, minimum_version: nil)
+      def self.add_process_unused(auto_confirm: false, ios_app_id: nil, user_id: nil, user_password: nil, minimum_version: nil, newest_version: nil)
         # 查询全量数据，但容易超时，未使用的用户只能全量查询
         puts "#{DateTime.now.to_time} 开始获取App数据……"
         app = Spaceship::ConnectAPI::App.get(app_id: ios_app_id)
@@ -157,7 +157,7 @@ module Fastlane
         end
         puts "#{DateTime.now.to_time} 获取测试人员列表成功，共#{testers.count}个"
 
-        ids = exec_process(testers, Filter_UnUse, auto_confirm, minimum_version)
+        ids = exec_process(testers, Filter_UnUse, auto_confirm, minimum_version, newest_version)
         return if ids.size < 1
 
         client = Spaceship::ConnectAPI::Client.login(user_id, user_password)
@@ -166,7 +166,7 @@ module Fastlane
         puts "Success，删除#{ids.size}个测试人员成功\n================================"
       end
 
-      def self.add_process_uninstall_expired(filter_type: (Filter_Uninstall | Filter_Expire), auto_confirm: false, ios_app_id: nil, user_id: nil, user_password: nil)
+      def self.add_process_uninstall_expired(filter_type: (Filter_Uninstall | Filter_Expire), auto_confirm: false, ios_app_id: nil, user_id: nil, user_password: nil, minimum_version: nil, newest_version: nil)
         # 每次查询Top 50，直到没有符合的记录，适合按状态排序后的扫描
         client = Spaceship::ConnectAPI::Client.login(user_id, user_password)
         puts '登录成功'
@@ -178,7 +178,7 @@ module Fastlane
 
           puts "#{DateTime.now.to_time} 获取测试人员列表成功，共#{testers.count}个"
 
-          ids = exec_process(testers, filter_type, auto_confirm, nil)
+          ids = exec_process(testers, filter_type, auto_confirm, minimum_version, newest_version)
           if ids.size < 1
             puts "未安装 or 已过期 测试员清除完毕\n================================"
             return

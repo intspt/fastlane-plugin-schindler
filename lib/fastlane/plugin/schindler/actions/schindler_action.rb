@@ -21,6 +21,7 @@ module Fastlane
         user_password = params[:user_password].to_s
         ios_app_id = params[:ios_app_id].to_s
         minimum_version = params[:minimum_version].to_s
+        newest_version = params[:newest_version].to_s
         puts "================================\n新建名单，初始化参数信息：\n筛选类型(位运算)：#{filter_type}  (#{Filter_Uninstall}-未安装，#{Filter_Expire}-已过期，#{Filter_UnUse}-未使用)\n跳过二次确认：#{auto_confirm}\n账号：#{user_id}\n密码：******\n应用ID：#{ios_app_id}\n================================"
 
         # 先扫描未安装、已过期
@@ -64,13 +65,14 @@ module Fastlane
             puts "最后更新时间：#{modified_date}"
             # 在sevenDaySessionCount支持前，暂时用session_count + lastModifiedDate
             count = metric.session_count.to_i
+            version = metric.installed_cf_bundle_short_version_string
 
             if (filter_type & Filter_Expire) > 0 && last_date < expiredtime
               # 过期
               ids << id
 
               puts '===== 已过期 +1 ====='
-            elsif (filter_type & Filter_UnUse) > 0 && (count < 10 || lower_than_minimum_version(metric.installed_cf_bundle_short_version_string, minimum_version))
+            elsif (filter_type & Filter_UnUse) > 0 && ((version != newest_version && count < 10) || lower_than_minimum_version(version, minimum_version))
               # 使用次数太少或者版本低于最小版本
               ids << id
 
@@ -240,7 +242,12 @@ module Fastlane
           FastlaneCore::ConfigItem.new(key: :minimum_version,
                                        env_name: 'MINIMUM_VERSION',
                                        description: '最低版本，如果传了。使用次数为0时需要低于最低版本才会删除',
-                                       optional: true,
+                                       optional: false,
+                                       type: String),
+          FastlaneCore::ConfigItem.new(key: :newest_version,
+                                       env_name: 'NEWEST_VERSION',
+                                       description: '最新版本，非最新版本的用户，使用次数低于10次就会删除',
+                                       optional: false,
                                        type: String)
         ]
       end
